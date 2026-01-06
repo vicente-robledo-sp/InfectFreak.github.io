@@ -1,2 +1,0 @@
-# InfectFreak.github.io
-InfectFreakInteractivePromo
