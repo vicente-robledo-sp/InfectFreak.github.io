@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>INFECFREAK FEST – Terminal Easter Egg (v11)</title>
+  <title>INFECFREAK FEST – Terminal Easter Egg (v12)</title>
   <style>
     :root{ --bg:#000; --green:#00ff8a; --red:#ff2b2b; }
     html,body{
@@ -23,6 +23,7 @@
       overflow:hidden;
       box-shadow: 0 0 140px rgba(0,255,138,.10);
       user-select:none;
+      touch-action: manipulation; /* helps reduce 300ms delay / weird gestures */
     }
     canvas{display:block;width:100%;height:100%;}
     .scanlines{
@@ -94,7 +95,7 @@
     <div class="noise"></div>
     <div class="flicker"></div>
     <div class="vignette"></div>
-    <div class="hint">Enter: EXECUTE • Click: Passline (pantalla tickets) • R: Reset</div>
+    <div class="hint">Enter/Tap: EXECUTE • Click: Passline (pantalla tickets) • R: Reset</div>
   </div>
 
 <script>
@@ -229,7 +230,6 @@
 
   // typewriter helper
   function typewriterLine(x, y, full, t, startAt, cps, size, color, alpha, weight){
-    // t in seconds, startAt in seconds
     const dt = t - startAt;
     if (dt <= 0) return 0;
     const chars = Math.min(full.length, Math.floor(dt * cps));
@@ -254,7 +254,7 @@
     text(120, 430, "PRESS ENTER TO EXECUTE", 44, GREEN, 0.92, "left", 900);
     text(120, 500, "NEXT: SCAN", 30, GREEN_DIM, 0.95, "left", 700);
 
-    // ✅ prompt no repite la ruta
+    // prompt no repite la ruta
     const prompt = "INFECFREAK>";
     text(120, 620, prompt, 36, GREEN, 0.85, "left", 800);
 
@@ -267,7 +267,7 @@
       ctx.restore();
     }
 
-    text(120, HEIGHT-170, "TIP: Enter para avanzar. R para reiniciar.", 24, GREEN_FAINT, 0.9, "left", 600);
+    text(120, HEIGHT-170, "TIP: Tap en pantalla (móvil) o Enter (desktop). R para reiniciar.", 24, GREEN_FAINT, 0.9, "left", 600);
   }
 
   function screenScan(){
@@ -298,20 +298,18 @@
     ctx.fillRect(120, 700, WIDTH-240, 2);
     ctx.restore();
 
-    // ✅ RUN scan.exe line (typewriter) before scanning starts
+    // RUN scan.exe
     const runY = 740;
     const runFull = "INFECFREAK> RUN scan.exe";
     const runStart = 0.15;
-    const runCps = 28; // chars per second (feel)
-    const typed = typewriterLine(120, runY, runFull, t, runStart, runCps, 34, GREEN, 0.88, 800);
+    const runCps = 28;
+    typewriterLine(120, runY, runFull, t, runStart, runCps, 34, GREEN, 0.88, 800);
 
-    // scanning text appears after run line finishes (+ small delay)
     const runDoneAt = runStart + (runFull.length / runCps) + 0.20;
     if (t >= runDoneAt) text(120, 800, "SCANNING SPECIMENS", 44, GREEN, 0.80, "left", 800);
 
     drawGrid();
 
-    // animated reveal: one name every 0.65s after scanning begins
     const leadIn = runDoneAt + 0.15;
     const step = 0.65;
     const count = Math.max(0, Math.min(EVENT.lineup.length, Math.floor((t - leadIn) / step) + 1));
@@ -370,7 +368,7 @@
 
     shadowGlow(1.15);
 
-    // ✅ RUN access.exe line (typewriter) first
+    // RUN access.exe
     const runY = y + 250;
     const runFull = "INFECFREAK> RUN access.exe";
     const runStart = 0.15;
@@ -459,7 +457,7 @@
     ctx.restore();
 
     drawBottomPrompt("RETURN TO ROOT");
-    text(120, HEIGHT-140, "LOG: INFECFREAK_EG.v11", 34, GREEN_DIM, 0.85, "left", 700);
+    text(120, HEIGHT-140, "LOG: INFECFREAK_EG.v12", 34, GREEN_DIM, 0.85, "left", 700);
   }
 
   function render(){
@@ -479,13 +477,19 @@
     requestAnimationFrame(render);
   }
 
+  // ===== navigation =====
+  let lastAdvanceMs = 0;
   function advance(){
+    const t = now();
+    if (t - lastAdvanceMs < 250) return; // anti double-fire (iOS touch + click)
+    lastAdvanceMs = t;
+
     state.screen = (state.screen + 1) % 4;
-    state.screenStartMs = now();
+    state.screenStartMs = t;
 
     doom();
-    state.glitchUntil = now() + 220;
-    state.bendUntil = now() + 260;
+    state.glitchUntil = t + 220;
+    state.bendUntil = t + 260;
   }
 
   function reset(){
@@ -498,22 +502,61 @@
     state.bendUntil = now() + 180;
   }
 
+  // ===== Passline hit helper =====
+  function openPasslineIfHit(clientX, clientY){
+    if (!state.passlineHit) return false;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = (clientX - rect.left) * (WIDTH / rect.width);
+    const y = (clientY - rect.top)  * (HEIGHT / rect.height);
+
+    const hit = state.passlineHit;
+    const inside = x >= hit.x && x <= (hit.x + hit.w) && y >= hit.y && y <= (hit.y + hit.h);
+    if (inside) {
+      window.open(PASSLINE_URL, "_blank", "noopener,noreferrer");
+      return true;
+    }
+    return false;
+  }
+
+  // ===== keyboard =====
   window.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { advance(); e.preventDefault(); return; }
     if (e.key.toLowerCase() === "r") { reset(); e.preventDefault(); return; }
   });
 
+  // ===== desktop click: open passline if hit, else advance =====
   canvas.addEventListener("click", (ev) => {
-    if (!state.passlineHit) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = (ev.clientX - rect.left) * (WIDTH / rect.width);
-    const y = (ev.clientY - rect.top)  * (HEIGHT / rect.height);
-
-    const hit = state.passlineHit;
-    const inside = x >= hit.x && x <= (hit.x + hit.w) && y >= hit.y && y <= (hit.y + hit.h);
-    if (inside) window.open(PASSLINE_URL, "_blank", "noopener,noreferrer");
+    const opened = openPasslineIfHit(ev.clientX, ev.clientY);
+    if (!opened) advance();
   });
+
+  // ===== mobile touch: tap to advance, tap on button opens passline =====
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchMoved = false;
+
+  canvas.addEventListener("touchstart", (ev) => {
+    if (!ev.touches || ev.touches.length === 0) return;
+    const t = ev.touches[0];
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    touchMoved = false;
+  }, { passive: true });
+
+  canvas.addEventListener("touchmove", (ev) => {
+    if (!ev.touches || ev.touches.length === 0) return;
+    const t = ev.touches[0];
+    const dx = Math.abs(t.clientX - touchStartX);
+    const dy = Math.abs(t.clientY - touchStartY);
+    if (dx > 10 || dy > 10) touchMoved = true;
+  }, { passive: true });
+
+  canvas.addEventListener("touchend", () => {
+    if (touchMoved) return;
+    const opened = openPasslineIfHit(touchStartX, touchStartY);
+    if (!opened) advance();
+  }, { passive: true });
 
   render();
 })();
